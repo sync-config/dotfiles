@@ -6,6 +6,5 @@ common/.config/libfm/
 common/.config/obs-studio/
 common/.config/pcmanfm/
 common/.config/QtProject.conf
-
-
-
+common/.config/dconf/
+common/.config/nvim/lazy-lock.json
