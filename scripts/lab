@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+#
+# lab: disposable Git worktree playground
+#
+# Usage: 
+#   lab <topic>
+# 
+# Example:
+#   lab ci-local
+#   lab alembic-migration
+
+set -Eeuo pipefail
+
+# ------- Configuration --------
+LAB_PREFIX="lab"
+BASE_TMPDIR="${TMPDIR:-/tmp}"
+SHELL_TO_OPEN="${SHELL:-/usr/bin/zsh}"
+
+die() {
+  printf 'lab: error: %s\n' "$*" >&2
+  exit 1
+}
+
+info() {
+  printf '\033[1;34m[lab]\033[0m %s\n' "$*"
+}
+
+warn() {
+  printf '\033[1;33m[lab]\033[0m %s\n' "$*" >&2
+}
+
+usage() {
+  cat << 'EOF'
+Usage: 
+  lab: <topic>
+
+Create a temporary git worktree from the current repository.
+
+Example:
+  lab ci-local
+  lab github-action
+  lab alembic-upgrade
+EOF
+}
+
+# --------- Validate input ----------
+if [[ $# -ne 1 || "$1" == "-h" || "$1" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+TOPIC="$1"
+
+# Keep directory names safe and readable.
+SAFE_TOPIC="$(printf '%s' "$TOPIC" | tr -cs '[:alnum:]._-' '-' | tr ' ' '-' )"
+[[ -n "$SAFE_TOPIC" ]] || die "topic is invaid"
+
+# Must run inside a Git repository.
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" \
+  || die "run this command from inside a Git repository"
+
+REPO_NAME="$(basename "$REPO_ROOT")"
+
+SESSION_DIR="$(mktemp -d -p "$BASE_TMPDIR" "${LAB_PREFIX}-${REPO_NAME}-${SAFE_TOPIC}-XXXXXX")"
+WORKTREE_DIR="$SESSION_DIR/repo"
+
+CLEANED_UP=0
+
+cleanup() {
+  local exit_code=$?
+
+  # Prevent cleanup from running twice.
+  [[ "$CLEANED_UP" -eq 1 ]] && exit "$exit_code"
+  CLEANED_UP=1
+  
+  printf "\n"
+  info "Cleaning up..."
+
+  # Remove the Git worktree registration first.
+  if [[ -d "$WORKTREE_DIR" ]]; then
+    git -C "$REPO_ROOT" worktree remove --force "$WORKTREE_DIR" 2>/dev/null \
+      || warn "could not remove worktree cleanly"
+  fi
+
+  # Remove remaining temporary files: notes, logs, etc.
+  rm -rf -- "$SESSION_DIR"
+
+  info "Remove: $SESSION_DIR"
+  exit "$exit_code"
+}
+
+trap cleanup EXIT INT TERM
+
+# --------- Create sandbox ---------
+info "Repository: $REPO_ROOT"
+info "Topic: $TOPIC"
+info "Session: $SESSION_DIR"
+
+# --detach means no throwaway branch is automatically created.
+# This is idea for experiments you intend to discard.
+git -C "$REPO_ROOT" worktree add --detach "$WORKTREE_DIR" HEAD
+
+# Metadata that helps you remember what this sandbox was for.
+cat > "$SESSION_DIR/README.md" <<EOF
+# Lab session
+
+- Repository: \`$REPO_ROOT\`
+- Topic: \`$TOPIC\`
+- Created: \`$(date --iso-8601=seconds)\`
+- Base commit: \`$(git -C "$REPO_ROOT" rev-parse --short HEAD)\`
+
+This directory is disposable.
+Exit the lab shell to remove it.
+EOF
+
+mkdir -p "$SESSION_DIR/notes" "$SESSION_DIR/logs"
+
+info "Sandbox is ready"
+info "Exit the shell to delete this session."
+printf "\n"
+
+cd "$WORKTREE_DIR"
+
+# Variables available only inside the lab sell
+export LAB_ACTIVE=1
+export LAB_TOPIC="$TOPIC"
+export LAB_ROOT="$SESSION_DIR"
+export LAB_REPO="$WORKTREE_DIR"
+
+# Start an interactive shell. When it exits, cleanup() runs.
+"$SHELL_TO_OPEN" -i
+
