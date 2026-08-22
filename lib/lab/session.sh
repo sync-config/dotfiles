@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-LAB_CLEANED_UP=0
-
 create_session() {
   LAB_SESSION_DIR="$(
     mktemp -d -p "$LAB_BASE_DIR" \
@@ -9,6 +7,7 @@ create_session() {
     )"
 
     LAB_WORKTREE_DIR="${LAB_SESSION_DIR}/repo"
+
     LAB_NOTES_DIR="${LAB_SESSION_DIR}/notes"
     LAB_LOGS_DIR="${LAB_SESSION_DIR}/logs"
 
@@ -17,11 +16,18 @@ create_session() {
     lab_info "Repository: $LAB_REPO_ROOT"
     lab_info "Topic: $LAB_TOPIC"
     lab_info "Session: $LAB_SESSION_DIR"
-
-    trap cleanup_lab EXIT INT TERM
 }
 
 create_metadata() {
+  cat > "${LAB_SESSION_DIR}/.lab-meta" <<EOF
+LAB_REPO_ROOT=$(printf '%q' "$LAB_REPO_ROOT")
+LAB_REPO_NAME=$(printf '%q' "$LAB_REPO_NAME")
+LAB_TOPIC=$(printf '%q' "$LAB_TOPIC")
+LAB_CREATED_AT=$(printf '%q' "$(date --iso-8601=seconds)")
+LAB_BASE_COMMIT=$(printf '%q' "$LAB_BASE_COMMIT")
+LAB_WORKTREE_DIR=$(printf '%q' "$LAB_WORKTREE_DIR")
+EOF
+
   cat > "${LAB_SESSION_DIR}/README.md" <<EOF
 # Lab session
 
@@ -75,12 +81,13 @@ entry_lab_shell() {
 
   cd "$LAB_WORKTREE_DIR"
 
-  export LAB_ACTIVE=1
-  export LAB_TOPIC
-  export LAB_ROOT="$LAB_SESSION_DIR"
-  export LAB_REPO="$LAB_WORKTREE_DIR"
-  export LAB_NOTES="$LAB_NOTES_DIR"
-  export LAB_LOGS="$LAB_LOGS_DIR"
-
+  LAB_ACTIVE=1
+  LAB_TOPIC="$LAB_TOPIC"
+  LAB_ROOT="$LAB_SESSION_DIR"
+  LAB_REPO="$LAB_WORKTREE_DIR"
+  LAB_NOTES="$LAB_NOTES_DIR"
+  LAB_LOGS="$LAB_LOGS_DIR"
   "$LAB_SHELL" -i
+
+  unset LAB_ACTIVE LAB_TOPIC LAB_REPO LAB_NOTES LAB_LOGS
 }

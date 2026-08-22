@@ -14,14 +14,10 @@ source "${LAB_LIB_DIR}/ui.sh"
 source "${LAB_LIB_DIR}/args.sh"
 source "${LAB_LIB_DIR}/git.sh"
 source "${LAB_LIB_DIR}/session.sh"
+source "${LAB_LIB_DIR}/manager.sh"
 
 main() {
-  parse_args "$@"
-  require_git_repository
-  create_session
-  create_worktree
-  create_metadata
-  entry_lab_shell
+  lab_dashboard
 }
 
 main "$@"
