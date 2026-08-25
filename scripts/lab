@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#
+# lab: disposable Git worktree playground
+#
+
+set -Eeuo pipefail
+
+LAB_LIB_DIR="${HOME}/.dotfiles/lib/lab/"
+
+# Load modules
+# shellcheck source=/dev/null
+source "${LAB_LIB_DIR}/config.sh"
+source "${LAB_LIB_DIR}/ui.sh"
+source "${LAB_LIB_DIR}/args.sh"
+source "${LAB_LIB_DIR}/git.sh"
+source "${LAB_LIB_DIR}/session.sh"
+source "${LAB_LIB_DIR}/manager.sh"
+
+main() {
+  lab_dashboard
+}
+
+main "$@"

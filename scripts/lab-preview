@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+#
+# fzf preview helper for lab.
+# Important: this script must NOT execute or source ~/.dotfiles/scripts/lab
+# because that would reopen the dashboard recursively.
+#
+
+set -Eeuo pipefail
+
+session_dir="${1:-}"
+meta_file="${session_dir}/.lab-meta"
+
+[[ -n "$session_dir" ]] || exit 0
+[[ -f "$meta_file" ]] || {
+  printf 'Invalid Lab: metadata file is missing.\n'
+  exit 0
+}
+
+# .lab-meta is created by our own lab script.
+# shellcheck disable=SC1090
+source "$meta_file"
+
+printf 'Repository: %s\n' "${LAB_REPO_NAME:-unknown}"
+printf 'Topic:      %s\n' "${LAB_TOPIC:-unknown}"
+printf 'Created:    %s\n' "${LAB_CREATED_AT:-unknown}"
+printf 'Commit:     %s\n' "${LAB_BASE_COMMIT:-unknown}"
+printf 'Path:       %s\n' "$session_dir"
+
+printf '\n--- Git status ---\n'
+
+if [[ -d "${LAB_WORKTREE_DIR:-}" ]]; then
+  git -C "$LAB_WORKTREE_DIR" status --short 2>/dev/null || true
+
+  printf '\n--- Recent commits ---\n'
+  git -C "$LAB_WORKTREE_DIR" log --oneline -5 2>/dev/null || true
+else
+  printf 'Worktree is missing.\n'
+fi
+
+printf '\n--- Notes ---\n'
+
+if [[ -d "${session_dir}/notes" ]]; then
+  find "${session_dir}/notes" \
+    -maxdepth 1 \
+    -type f \
+    -printf '%f\n' \
+    2>/dev/null || true
+else
+  printf 'No notes directory.\n'
+fi
+
