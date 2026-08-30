@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+#-------------------------------------
+# Base Directories & Library Loader
+#-------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+LIB_DIR="$DOTFILES_DIR/lib/project_manager"
+
+# Load modules
+source "$LIB_DIR/core.sh"
+source "$LIB_DIR/restore.sh"
+source "$LIB_DIR/ui.sh"
+
+#-------------------------------------
+# Configuration
+#-------------------------------------
+PROJECT_DIR="${PROJECT_DIR:-$HOME/w}"
+SESSION_LIST_HELPER="$SCRIPT_DIR/tmux-session-list"
+
+#-------------------------------------
+# Main Application Entypoint
+#-------------------------------------
+main() {
+  mkdir -p "$PROJECT_DIR"
+
+  ensure_session_restored
+
+  local current_session
+  current_session="$(get_current_session)"
+
+  local input
+  input="$(select_project_fzf "$current_session" "$SESSION_LIST_HELPER")" || true
+  
+  [ -z "$input" ] && return 0
+
+  local query selected name
+  query="$(printf '%s\n' "$input" | sed -n '1p')"
+  selected="$(printf '%s\n' "$input" | sed -n '2p')"
+  name="${selected:-$query}"
+
+  [ -z "$name" ] && return 1
+  validate_session_name "$name" || return 1
+
+  local session="$name"
+  local dir="$PROJECT_DIR/$name"
+
+  if session_exists "$session" ;then
+    connect_session "$session"
+  else
+    create_session "$session" "$dir"
+  fi
+}
+
+main

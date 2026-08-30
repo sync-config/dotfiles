@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
-current="$1"
-tmux list-sessions -F '#S' 2>/dev/null | grep -vxF "$current"
+set -euo pipefail
+
+current="${1:-}"
+tmux list-sessions -F '#S' 2>/dev/null | 
+  sort -u |
+  grep -vxF "$current" || true
 
