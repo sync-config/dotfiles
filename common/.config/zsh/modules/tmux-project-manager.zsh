@@ -1,1 +1,1 @@
-alias tpm="tmux-project-manager"
+alias tpm="project-manager"
