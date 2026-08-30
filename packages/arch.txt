@@ -36,3 +36,5 @@ shellcheck
 yamllint
 lua-language-server
 stylua
+
+inetutils

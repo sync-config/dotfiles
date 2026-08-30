@@ -36,3 +36,4 @@ shellcheck
 yamllint
 lua-language-server
 
+hostname
