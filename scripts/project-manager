@@ -8,6 +8,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 LIB_DIR="$DOTFILES_DIR/lib/project_manager"
+PREVIEW_SCRIPT="$SCRIPT_DIR/tmux-session-preview"
 
 # Load modules
 source "$LIB_DIR/core.sh"
@@ -32,7 +33,7 @@ main() {
   current_session="$(get_current_session)"
 
   local input
-  input="$(select_project_fzf "$current_session" "$SESSION_LIST_HELPER")" || true
+  input="$(select_project_fzf "$current_session" "$SESSION_LIST_HELPER" "$PREVIEW_SCRIPT")" || true
   
   [ -z "$input" ] && return 0
 
