@@ -9,8 +9,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 LIB_DIR="$DOTFILES_DIR/lib/project_manager"
 PREVIEW_SCRIPT="$SCRIPT_DIR/tmux-session-preview"
+SESSION_LIST_HELPER="$SCRIPT_DIR/tmux-session-list"
 
 # Load modules
+source "$LIB_DIR/config.sh"
 source "$LIB_DIR/core.sh"
 source "$LIB_DIR/restore.sh"
 source "$LIB_DIR/ui.sh"
@@ -18,8 +20,7 @@ source "$LIB_DIR/ui.sh"
 #-------------------------------------
 # Configuration
 #-------------------------------------
-PROJECT_DIR="${PROJECT_DIR:-$HOME/w}"
-SESSION_LIST_HELPER="$SCRIPT_DIR/tmux-session-list"
+ensure_project_dir
 
 #-------------------------------------
 # Main Application Entypoint

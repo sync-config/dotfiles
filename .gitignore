@@ -1,3 +1,7 @@
+# Enviroment variabels
+*.env
+
+# Config Temprory
 common/.config/google-chrome/
 common/.config/awesome/theme/
 common/.config/gh/
