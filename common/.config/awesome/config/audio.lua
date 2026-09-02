@@ -4,7 +4,7 @@ local gears = require("gears")
 local M = {}
 
 local home = os.getenv("HOME")
-local audio_script = home .. "/.dotfiles/scripts/audio.sh"
+local audio_script = home .. "/.config/awesome/scripts/audio.sh"
 
 function M.auto()
   awful.spawn.with_shell(audio_script .. " auto >/dev/null 2>&1")
