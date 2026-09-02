@@ -2,17 +2,25 @@
 
 set -Eeuo pipefail
 
-SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SOURCE_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 DOTFILES_DIR="$(cd -- "$SOURCE_DIR/.." &>/dev/null && pwd)"
 LIB_DIR="$DOTFILES_DIR/lib"
 
 source "$LIB_DIR/workflow/core.sh"
 source "$LIB_DIR/workflow/git.sh"
-source "$LIB_DIR/workflow/flow/start.sh"
-source "$LIB_DIR/workflow/flow/done.sh"
-source "$LIB_DIR/workflow/flow/status.sh"
-source "$LIB_DIR/workflow/flow/release.sh"
-source "$LIB_DIR/workflow/flow/clean.sh"
+
+# Load all Flow subcommands
+for module in "$LIB_DIR"/workflow/flow/*.sh; do
+  if [[ -r "$module" ]]; then
+    source "$module"
+  fi
+done
 
 usage() {
   cat <<'EOF'
