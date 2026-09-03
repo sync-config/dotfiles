@@ -29,7 +29,7 @@ alias open-project="gh project view 6 --owner Mohammadhoseinajorloo --web"
 #############################################
 ############ UPDATEING PATHS   ##############
 #############################################
-MY_SCRIPT_PATH="$HOME/.dotfiles/scripts"
+MY_SCRIPT_PATH="$HOME/.dotfiles/bin"
 
 if [[ ":$PATH:" != *":$MY_SCRIPT_PATH:"* ]]; then
   export PATH="$MY_SCRIPT_PATH:$PATH"
