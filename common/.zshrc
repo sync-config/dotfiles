@@ -24,6 +24,7 @@ bindkey '^N' down-history
 #############################################
 alias zshrc="nvim ~/.zshrc"
 alias reload="source ~/.zshrc"
+alias open-project="gh project view 6 --owner Mohammadhoseinajorloo --web"
 
 #############################################
 ############ UPDATEING PATHS   ##############
@@ -45,4 +46,3 @@ done
 for modules_file in $ZSH_CONFIG_DIR/modules/*.zsh;do
   source "$modules_file"
 done
-
