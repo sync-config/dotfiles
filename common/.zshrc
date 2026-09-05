@@ -24,7 +24,6 @@ bindkey '^N' down-history
 #############################################
 alias zshrc="nvim ~/.zshrc"
 alias reload="source ~/.zshrc"
-alias open-project="gh project view 6 --owner Mohammadhoseinajorloo --web"
 
 #############################################
 ############ UPDATEING PATHS   ##############
