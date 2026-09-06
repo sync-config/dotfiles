@@ -1,6 +1,9 @@
 # Enviroment variabels
 *.env
 
+# github cli
+common/.config/gh/hosts.yml
+
 # Config Temprory
 common/.config/google-chrome/
 common/.config/awesome/theme/
