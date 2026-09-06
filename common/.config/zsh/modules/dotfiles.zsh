@@ -16,7 +16,7 @@ dotapply() {
 }
 
 dotinstall() {
-    "$DOTFILES/scripts/install-packages.sh"
+    "$DOTFILES/setup/install-packages.sh"
 }
 
 dotsync() {
