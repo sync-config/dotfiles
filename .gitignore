@@ -4,6 +4,16 @@
 # github cli
 common/.config/gh/hosts.yml
 
+# GTK files
+common/.config/.gsd-keyboard.settings-ported
+common/.config/background
+common/.config/gnome-initial-setup-done
+common/.config/user-dirs.dirs
+common/.config/user-dirs.locale
+
+#‌ Nvim 
+common/.config/nvim/lazy-lock.json
+
 # Config Temprory
 common/.config/google-chrome/
 common/.config/awesome/theme/
@@ -13,5 +23,11 @@ common/.config/obs-studio/
 common/.config/pcmanfm/
 common/.config/QtProject.conf
 common/.config/dconf/
-common/.config/nvim/lazy-lock.json
 common/.config/kicad/
+common/.config/evolution/
+common/.config/gtk-3.0/
+common/.config/ibus/
+common/.config/kdeconnect/
+common/.config/pulse/
+common/.config/syncthing/
+common/.config/enchant/
