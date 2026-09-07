@@ -37,3 +37,4 @@ yamllint
 lua-language-server
 
 hostname
+opencode
