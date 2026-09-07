@@ -1,6 +1,67 @@
-#!/bin/bash
-tmux split-window -h -l 20%
-tmux select-pane -L
-tmux split-window -v -l 30%
-tmux split-window -h -l 66%
-tmux split-window -h -l 50%
+#!/usr/bin/env bash
+#
+# scripts/ide - Create a 3-pane tmux development layout with:
+#   1. Master pane (Top-Left): Primary development / Editor
+#   2. Terminal pane (Bottom-Left): Build, test, and shell commands
+#   3. Agent pane (Right): AI Agent environment
+
+set -euo pipefail
+
+# Configurable defaults
+DEFAULT_AGENT_CMD="${AI_AGENT_CMD:-opencode}"
+AGENT_WIDTH_PERCENT="${IDE_AGENT_WIDTH:-25}"
+TERMINAL_HEIGHT_PERCENT="${IDE_TERM_HEIGHT:-30}"
+
+# Check prerequisites
+validate_environment() {
+  if ! command -v tmux >/dev/null 2>&1; then
+    echo "Error: tmux is not installed or not found in PATH." >&2
+    exit 1
+  fi
+
+  if [ -z "${TMUX:-}" ]; then
+    echo "Error: scripts/ide must be run from inside an active tmux session." >&2
+    exit 1
+  fi
+}
+
+# Create the 3-pane layout
+setup_workspace() {
+  local agent_cmd="${1:-$DEFAULT_AGENT_CMD}"
+
+  # Get current window and active pane
+  local base_pane
+  base_pane="$(tmux display-message -p '#{pane_id}')"
+
+  # Close any other existing panes in the current window to ensure a clean slate
+  # (Avoids "size or position invalid" caused by dividing an already split window)
+  tmux kill-pane -a -t "$base_pane" 2>/dev/null || true
+
+  # 1. Create the right-side Agent Pane spanning the full height
+  local agent_pane
+  agent_pane="$(tmux split-window -h -l "${AGENT_WIDTH_PERCENT}%" -c "#{pane_current_path}" -P -F "#{pane_id}" 2>/dev/null || \
+                tmux split-window -h -p "$AGENT_WIDTH_PERCENT" -c "#{pane_current_path}" -P -F "#{pane_id}")"
+
+  # 2. Return focus to the base pane and create the bottom Terminal Pane
+  tmux select-pane -t "$base_pane"
+  local term_pane
+  term_pane="$(tmux split-window -v -l "${TERMINAL_HEIGHT_PERCENT}%" -c "#{pane_current_path}" -P -F "#{pane_id}" 2>/dev/null || \
+               tmux split-window -v -p "$TERMINAL_HEIGHT_PERCENT" -c "#{pane_current_path}" -P -F "#{pane_id}")"
+
+  # 3. Launch AI Agent inside the Agent pane
+  if [ -n "$agent_cmd" ]; then
+    tmux send-keys -t "$agent_pane" "$agent_cmd" C-m
+  fi
+
+  # 4. Focus back on the Master (top-left) pane for active development
+  tmux select-pane -t "$base_pane"
+}
+
+main() {
+  validate_environment
+
+  local agent_cmd="${1:-$DEFAULT_AGENT_CMD}"
+  setup_workspace "$agent_cmd"
+}
+
+main "$@"
