@@ -4,13 +4,89 @@
 #   1. Master pane (Top-Left): Primary development / Editor
 #   2. Terminal pane (Bottom-Left): Build, test, and shell commands
 #   3. Agent pane (Right): AI Agent environment
+#
+# configuration precedence (highest -> lowest)
+#   1. CLI argument              (e.g. `bin/ide aider`)
+#   2. Explicit env variable     (e.g. `AI_AGENT_CMD=claude bin/ide`)
+#   3. project .env              ($PWD/.env)
+#   4. Global dotfiles config    (~/.config/ide/ide.env)
+#   5. Script defaults           (opencode, 25%, 30%)
 
 set -euo pipefail
 
-# Configurable defaults
-DEFAULT_AGENT_CMD="${AI_AGENT_CMD:-opencode}"
-AGENT_WIDTH_PERCENT="${IDE_AGENT_WIDTH:-25}"
-TERMINAL_HEIGHT_PERCENT="${IDE_TERM_HEIGHT:-30}"
+# Variables allowed to be loaded from .env files
+readonly _ENV_KEYS=(AI_AGENT_CMD IDE_AGENT_WIDTH IDE_TERM_HEIGHT)
+
+# -----------------------------------------------------------------------
+# Safe .env loader (no `source` -> no code injection from untusted files)
+# -----------------------------------------------------------------------
+load_env_file() {
+  local file="${1:-}"
+  local key=""
+  local value=""
+  local line=""
+  local alllowed=""
+
+  [ -f "$file" ] || return 0
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    # strip comments
+    line="${line%%\#*}"
+    # trim leading/trailing whitespace (pure bash)
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [ -z "$line" ] && continue
+
+    case "$line" in
+      *=*) ;; # KEY=VALUE
+      *) continue ;;
+    esac
+
+    key="${line%%=*}"
+    value="${line#*=}"
+
+    key="${key#"${key%%[![:space:]]*}"}"
+    key="${key%"${key##*[![:space:]]*}"}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]*}"}"
+
+    # Trim single and double quotes safely
+    value="${value#\"}"
+    value="${value%\"}"
+    value="${value#\'}"
+    value="${value%\'}"
+
+
+    # only accept whitelisted keys
+    for allowed in "${_ENV_KEYS[@]}"; do
+      if [[ "$key" = "$allowed" ]]; then
+        # Never override a variable that is already set in the environment
+        # so explicit shell exports keep priority over the .env file.
+        if [ -z "${!allowed+x}" ]; then
+          printf -v "$allowed" '%s' "$value"
+          export "$allowed"
+        fi
+      fi
+    done
+  done < "$file"
+}
+
+
+# -----------------------------------------------------------------------
+# Load configuration: project .env first, then global dotfiles config
+# -----------------------------------------------------------------------
+load_config() {
+  load_env_file "${HOME}/.config/ide/ide.conf"
+}
+
+# -----------------------------------------------------------------------
+# Load configuration: project .env first, then global dotfiles config
+# -----------------------------------------------------------------------
+apply_defaults() {
+  : "${AI_AGENT_CMD:=opencode}"
+  : "${IDE_AGENT_WIDTH:=25}"
+  : "${IDE_TERM_HEIGHT:=30}"
+}
 
 # Check prerequisites
 validate_environment() {
@@ -27,10 +103,13 @@ validate_environment() {
 
 # Create the 3-pane layout
 setup_workspace() {
-  local agent_cmd="${1:-$DEFAULT_AGENT_CMD}"
+  local agent_cmd="${1:-$AI_AGENT_CMD}"
+  local base_pane=""
+  local agent_pane=""
+  local term_pane=""
+
 
   # Get current window and active pane
-  local base_pane
   base_pane="$(tmux display-message -p '#{pane_id}')"
 
   # Close any other existing panes in the current window to ensure a clean slate
@@ -38,15 +117,13 @@ setup_workspace() {
   tmux kill-pane -a -t "$base_pane" 2>/dev/null || true
 
   # 1. Create the right-side Agent Pane spanning the full height
-  local agent_pane
-  agent_pane="$(tmux split-window -h -l "${AGENT_WIDTH_PERCENT}%" -c "#{pane_current_path}" -P -F "#{pane_id}" 2>/dev/null || \
-                tmux split-window -h -p "$AGENT_WIDTH_PERCENT" -c "#{pane_current_path}" -P -F "#{pane_id}")"
+  agent_pane="$(tmux split-window -h -l "${IDE_AGENT_WIDTH}%" -c "#{pane_current_path}" -P -F "#{pane_id}" 2>/dev/null || \
+                tmux split-window -h -p "$IDE_AGENT_WIDTH" -c "#{pane_current_path}" -P -F "#{pane_id}")"
 
   # 2. Return focus to the base pane and create the bottom Terminal Pane
   tmux select-pane -t "$base_pane"
-  local term_pane
-  term_pane="$(tmux split-window -v -l "${TERMINAL_HEIGHT_PERCENT}%" -c "#{pane_current_path}" -P -F "#{pane_id}" 2>/dev/null || \
-               tmux split-window -v -p "$TERMINAL_HEIGHT_PERCENT" -c "#{pane_current_path}" -P -F "#{pane_id}")"
+  term_pane="$(tmux split-window -v -l "${IDE_TERM_HEIGHT}%" -c "#{pane_current_path}" -P -F "#{pane_id}" 2>/dev/null || \
+               tmux split-window -v -p "$IDE_TERM_HEIGHT" -c "#{pane_current_path}" -P -F "#{pane_id}")"
 
   # 3. Launch AI Agent inside the Agent pane
   if [ -n "$agent_cmd" ]; then
@@ -60,7 +137,15 @@ setup_workspace() {
 main() {
   validate_environment
 
-  local agent_cmd="${1:-$DEFAULT_AGENT_CMD}"
+  load_config
+  apply_defaults
+
+  # CLI argument has the highest priority (overides everything)
+  local agent_cmd="${1:-$AI_AGENT_CMD}"
+
+  #printf 'agent_cmd would be: [%s]\n' "$agent_cmd"
+  #echo "AI_AGENT_CMD env = [${AI_AGENT_CMD:-}]"
+
   setup_workspace "$agent_cmd"
 }
 
