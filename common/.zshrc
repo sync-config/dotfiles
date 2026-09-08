@@ -46,3 +46,6 @@ done
 for modules_file in $ZSH_CONFIG_DIR/modules/*.zsh;do
   source "$modules_file"
 done
+
+# opencode
+export PATH=/home/mohos/.opencode/bin:$PATH

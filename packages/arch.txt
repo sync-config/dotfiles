@@ -38,3 +38,4 @@ lua-language-server
 stylua
 
 inetutils
+opencode
