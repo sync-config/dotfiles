@@ -48,6 +48,10 @@ case "${1:-}" in
     cmd_status
     ;;
 
+  lock)
+    cmd_lock
+    ;;
+
   *)
     echo "Error: Unknown command '${1}'" >&2
     echo "" >&2
