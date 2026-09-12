@@ -5,14 +5,28 @@ alias dotstatus='git -C "$DOTFILES" status'
 alias dotdiff='git -C "$DOTFILES" diff'
 alias dotlog='git -C "$DOTFILES" log --oneline --decorate -10'
 
+link_binaries() {
+  local dotfiles_bin="$DOTFILES/bin"
+  local target_dir="/usr/local/bin"
 
+  echo "Linking system-wide binaries to $target_dir..."
+  
+  for script in "$dotfiles_bin"/*; do
+    if [[ -f "$script" && -x "$script" ]]; then
+      local name="$(basename "$script")"
+      sudo ln -sf "$script" "$target_dir/$name"
+    fi
+  done
+}
 
 dotapply() {
+    link_binaries
     stow \
         --dir="$DOTFILES" \
         --target="$HOME" \
         --restow \
         common
+
 }
 
 dotinstall() {
@@ -24,14 +38,6 @@ dotsync() {
     dotapply
 }
 
-dotsave() {
-    local message="${*:-dotfiles: update}"
-
-    git -C "$DOTFILES" add -A &&
-        git -C "$DOTFILES" commit -m "$message" &&
-        git -C "$DOTFILES" push
-}
-
 dotupdate() {
     dotsync || return 1
     dotinstall || return 1
@@ -40,4 +46,3 @@ dotupdate() {
         nvim --headless "+Lazy! sync" +qa
     fi
 }
-

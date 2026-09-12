@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
 RESOLV_CONF="/etc/resolv.conf"
+SHECAN_DNS1="178.22.122.100"
+SHECAN_DNS2="185.51.200.2"
 
 check_file() {
   if [[ ! -f "$RESOLV_CONF" ]]; then
@@ -18,6 +20,13 @@ check_deps() {
     fi
   done
 
+}
+
+require_root(){
+  if [[ $EUID -ne 0 ]]; then
+    echo "Error: This command requires superuser privileges (run with sudo)." >&2
+    exit 1
+  fi
 }
 
 is_immutable() {

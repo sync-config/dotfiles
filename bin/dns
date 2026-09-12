@@ -40,6 +40,10 @@ case "${1:-}" in
     cmd_status
     ;;
 
+  shecan)
+    cmd_shecan 
+    ;;
+
   "")
     cmd_status
     ;;
