@@ -56,6 +56,14 @@ case "${1:-}" in
     cmd_unlock
     ;;
 
+  help,--help,-h)
+    cmd_help
+    ;;
+
+  "")
+    cmd_status
+    ;;
+
   *)
     echo "Error: Unknown command '${1}'" >&2
     echo "" >&2
