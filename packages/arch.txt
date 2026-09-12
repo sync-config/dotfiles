@@ -39,3 +39,4 @@ stylua
 
 inetutils
 opencode
+e2fsprogs
