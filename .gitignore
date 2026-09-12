@@ -29,5 +29,6 @@ common/.config/gtk-3.0/
 common/.config/ibus/
 common/.config/kdeconnect/
 common/.config/pulse/
+common/.config/systemd/
 common/.config/syncthing/
 common/.config/enchant/
