@@ -1,6 +1,10 @@
 # Enviroment variabels
 *.env
 
+# Monitor configurations (Hardware-specific)
+common/.config/monitors.xml
+common/.config/monitors.xml~
+
 # github cli
 common/.config/gh/hosts.yml
 
@@ -15,6 +19,9 @@ common/.config/user-dirs.locale
 common/.config/nvim/lazy-lock.json
 
 # Config Temprory
+common/.config/menus/
+common/.config/totem/
+common/.config/nekoray/
 common/.config/google-chrome/
 common/.config/awesome/theme/
 common/.config/act/
