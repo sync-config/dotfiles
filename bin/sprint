@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# File: ~/.dotfiles/bin/sprint
+
+set -e
+
+# Fetch target from task configuration or default to 7
+RAW_TARGET=$(task _get rc.sprint.target 2>/dev/null || true)
+TARGET="${RAW_TARGET:-7}"
+
+case "$1" in
+  # View sprint status, remaining tasks, and velocity metrics
+  status|"")
+    echo "==============================================="
+    echo "         🎯 PERSONAL SPRINT DASHBOARD          "
+    echo "==============================================="
+    task sprint
+    echo "-----------------------------------------------"
+    
+    # Calculate committed points currently pending in the sprint
+    COMMITTED=$(task +sprint status:pending export 2>/dev/null | jq '[.[].points // 0] | add' 2>/dev/null || echo 0)
+    COMMITTED=${COMMITTED:-0}
+    
+    # Calculate completed points over the last 7 days
+    DONE=$(task +sprint status:completed end.after:today-7days export 2>/dev/null | jq '[.[].points // 0] | add' 2>/dev/null || echo 0)
+    DONE=${DONE:-0}
+
+    echo "📊 Capacity Target: $TARGET pts"
+    echo "⏳ In Progress:     $COMMITTED pts"
+    echo "✅ Done (7d):       $DONE pts"
+    
+    if [ "$COMMITTED" -gt "$TARGET" ]; then
+      echo "⚠️  WARNING: Committed sprint points exceed weekly capacity ($TARGET pts)!"
+    fi
+    echo "==============================================="
+    ;;
+
+  # Add a task to current sprint with capacity pre-check
+  add)
+    TASK_ID="$2"
+    if [ -z "$TASK_ID" ]; then
+      echo "Usage: sprint add <task-id>"
+      exit 1
+    fi
+    
+    TASK_PTS=$(task _get "$TASK_ID.points" 2>/dev/null || echo 0)
+    TASK_PTS=${TASK_PTS:-0}
+    
+    CURRENT=$(task +sprint status:pending export 2>/dev/null | jq '[.[].points // 0] | add' 2>/dev/null || echo 0)
+    CURRENT=${CURRENT:-0}
+    
+    NEW_TOTAL=$((CURRENT + TASK_PTS))
+
+    if [ "$NEW_TOTAL" -gt "$TARGET" ]; then
+      echo "⚠️  WARNING: Adding task #$TASK_ID ($TASK_PTS pts) will exceed weekly target ($NEW_TOTAL / $TARGET pts)!"
+      read -r -p "Do you want to overcommit? [y/N]: " confirm
+      if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo "Aborted."
+        exit 0
+      fi
+    fi
+    task "$TASK_ID" modify +sprint
+    echo "Task #$TASK_ID successfully added to sprint."
+    ;;
+
+  # Weekly sprint retrospective and rollover
+  close)
+    echo "==============================================="
+    echo "         🏁 SPRINT RETROSPECTIVE & CLOSE       "
+    echo "==============================================="
+    DONE=$(task +sprint status:completed end.after:today-7days export 2>/dev/null | jq '[.[].points // 0] | add' 2>/dev/null || echo 0)
+    echo "Total completed velocity this week: ${DONE:-0} pts"
+    echo "-----------------------------------------------"
+    
+    read -r -p "Move pending tasks back to backlog? [y/N]: " ans
+    if [[ "$ans" =~ ^[Yy]$ ]]; then
+      task +sprint status:pending modify -sprint
+      echo "Pending tasks demoted to general backlog."
+    else
+      echo "Remaining tasks kept in current sprint."
+    fi
+    ;;
+
+  # Get or set weekly capacity target
+  target)
+    NEW_TARGET="$2"
+    if [ -n "$NEW_TARGET" ]; then
+      task config sprint.target "$NEW_TARGET"
+      echo "Sprint capacity target updated to: $NEW_TARGET pts"
+    else
+      echo "Current capacity target: $TARGET pts"
+    fi
+    ;;
+
+  *)
+    echo "Usage: sprint [status] | sprint add <id> | sprint close | sprint target [pts]"
+    ;;
+esac
