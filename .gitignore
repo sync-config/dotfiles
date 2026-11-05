@@ -19,6 +19,12 @@ common/.config/user-dirs.locale
 common/.config/nvim/lazy-lock.json
 
 # Config Temprory
+common/.config/vlc/
+common/.config/prisma-nodejs/
+common/.config/nextjs-nodejs/
+common/.config/nautilus/
+common/.config/create-next-app-nodejs/
+common/.config/astro/
 common/.config/menus/
 common/.config/totem/
 common/.config/nekoray/
