@@ -27,7 +27,6 @@ usage() {
 Usage:
   flow start
   flow done ["title"] ["description"]
-  flow clean
   flow release <version>
   flow status
   flow help
@@ -35,7 +34,6 @@ Usage:
 Commands:
   start    Select/create feature branch from develop
   done     Push feature branch and open PR targeting develop
-  clean    Switch to develop, pull changes, and delete feature branch
   release  Merge develop to main, tag the release, sync, and push
   status   Show the current Git status
   help     Show this help
@@ -58,10 +56,6 @@ main() {
 
     status)
       cmd_status "$@"
-      ;;
-
-    clean)
-      cmd_clean "$@"
       ;;
 
     release)

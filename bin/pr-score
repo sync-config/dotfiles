@@ -1,0 +1,383 @@
+#!/usr/bin/env python3
+"""
+pr-score: GitHub Pull Request Health Evaluator & Auto-Gatekeeper
+Author: mamad & GapGPT
+"""
+
+import argparse
+import json
+import subprocess
+import sys
+import time
+from typing import Any, Dict, Tuple
+
+# ANSI Colors for Terminal
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+RED = "\033[91m"
+BLUE = "\033[94m"
+BOLD = "\033[1m"
+RESET = "\033[0m"
+
+
+def run_command(cmd: list) -> str:
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return res.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        sys.stderr.write(
+            f"{RED}[!] Command failed: {' '.join(cmd)}{RESET}\n{e.stderr}\n"
+        )
+        sys.exit(1)
+
+
+def fetch_pr_data(pr_number: str) -> Dict[str, Any]:
+    fields = "number,title,isDraft,mergeable,additions,deletions,changedFiles,reviewDecision,statusCheckRollup"
+    cmd = ["gh", "pr", "view", pr_number, f"--json={fields}"]
+    pr_data = json.loads(run_command(cmd))
+
+    # Fetch review threads via GraphQL
+    graphql_query = """
+    query($owner: String!, $repo: String!, $pr: Int!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $pr) {
+          reviewThreads(first: 50) {
+            nodes {
+              isResolved
+            }
+          }
+        }
+      }
+    }
+    """
+    repo_view = json.loads(run_command(["gh", "repo", "view", "--json=owner,name"]))
+    gh_cmd = [
+        "gh",
+        "api",
+        "graphql",
+        "-F",
+        f"owner={repo_view['owner']['login']}",
+        "-F",
+        f"repo={repo_view['name']}",
+        "-F",
+        f"pr={int(pr_number)}",
+        "-f",
+        f"query={graphql_query}",
+    ]
+    threads_data = json.loads(run_command(gh_cmd))
+    pr_data["threads"] = threads_data["data"]["repository"]["pullRequest"][
+        "reviewThreads"
+    ]["nodes"]
+    return pr_data
+
+
+def wait_for_ci_completion(
+    pr_number: str, timeout_seconds: int = 600, interval: int = 10
+) -> Dict[str, Any]:
+    """
+    Waits for GitHub CI checks to trigger and finish running.
+    """
+    print(
+        f"{BLUE}[*] Waiting for CI checks to initialize and complete (timeout: {timeout_seconds}s)...{RESET}"
+    )
+    start_time = time.time()
+
+    # Grace period for GitHub to register webhook and start actions
+    time.sleep(5)
+
+    while True:
+        data = fetch_pr_data(pr_number)
+        rollup = data.get("statusCheckRollup", [])
+
+        states = [item.get("status", "") or item.get("state", "") for item in rollup]
+
+        # If no CI checks are present yet, wait up to 30s before concluding there are truly none
+        if not rollup:
+            elapsed = int(time.time() - start_time)
+            if elapsed < 30:
+                sys.stdout.write(
+                    f"\r{YELLOW}[*] Waiting for CI workflows to register... ({elapsed}s){RESET}"
+                )
+                sys.stdout.flush()
+                time.sleep(interval)
+                continue
+            else:
+                print(
+                    f"\n{YELLOW}[!] No CI checks found for this PR. Proceeding...{RESET}"
+                )
+                return data
+
+        is_running = any(s in ["IN_PROGRESS", "QUEUED", "PENDING"] for s in states)
+
+        if not is_running:
+            print(f"\n{GREEN}[✔] All CI workflows have concluded!{RESET}")
+            return data
+
+        elapsed = int(time.time() - start_time)
+        if elapsed > timeout_seconds:
+            print(
+                f"\n{RED}[!] CI wait timed out after {timeout_seconds} seconds. Proceeding with current status...{RESET}"
+            )
+            return data
+
+        pending_count = sum(
+            1 for s in states if s in ["IN_PROGRESS", "QUEUED", "PENDING"]
+        )
+        sys.stdout.write(
+            f"\r{BLUE}⏳ CI running... ({pending_count} checks active) | Elapsed: {elapsed}s{RESET}"
+        )
+        sys.stdout.flush()
+
+        time.sleep(interval)
+
+
+def evaluate_ci(rollup: list) -> Tuple[int, str, str]:
+    if not rollup:
+        return 15, "NO CHECKS", "⚪ No checks configured (Neutral)"
+
+    states = [item.get("status", "") or item.get("state", "") for item in rollup]
+    conclusions = [item.get("conclusion", "") for item in rollup]
+
+    if any(c in ["FAILURE", "ACTION_REQUIRED", "CANCELLED"] for c in conclusions):
+        return 0, "FAILED", "❌ Build/Tests Failed"
+    if any(s in ["IN_PROGRESS", "QUEUED", "PENDING"] for s in states):
+        return 10, "PENDING", "⏳ Checks still running"
+    if all(c in ["SUCCESS", "NEUTRAL", "SKIPPED"] for c in conclusions):
+        return 30, "PASSED", "✅ All CI checks passed"
+    return 15, "UNKNOWN", "⚪ Unknown status"
+
+
+def evaluate_size(additions: int, deletions: int) -> Tuple[int, str, str]:
+    total_churn = additions + deletions
+    if total_churn <= 200:
+        return (
+            20,
+            f"+{additions}/-{deletions}",
+            "✅ Compact & Clean diff (<= 200 lines)",
+        )
+    elif total_churn <= 500:
+        return 15, f"+{additions}/-{deletions}", "✅ Manageable diff (<= 500 lines)"
+    elif total_churn <= 1000:
+        return 5, f"+{additions}/-{deletions}", "⚠️ Large PR - High cognitive load"
+    else:
+        return (
+            0,
+            f"+{additions}/-{deletions}",
+            "❌ Massive PR (> 1000 lines) - Needs split",
+        )
+
+
+def evaluate_reviews(decision: str) -> Tuple[int, str, str]:
+    if decision == "APPROVED":
+        return 25, "APPROVED", "✅ Approved by peer reviewers"
+    elif decision == "CHANGES_REQUESTED":
+        return 0, "CHANGES_REQUESTED", "❌ Changes requested by reviewers"
+    elif decision == "REVIEW_REQUIRED":
+        return 10, "PENDING", "⚠️ Awaiting code reviews"
+    return 10, "NO_REVIEWS", "⚪ No reviews submitted yet"
+
+
+def evaluate_discussions(threads: list) -> Tuple[int, str, str]:
+    if not threads:
+        return 15, "0 Unresolved", "✅ No discussions or inline comments"
+
+    unresolved = [t for t in threads if not t.get("isResolved", False)]
+    if len(unresolved) == 0:
+        return 15, "All Resolved", "✅ All conversations marked as resolved"
+    else:
+        return (
+            0,
+            f"{len(unresolved)} Unresolved",
+            f"❌ {len(unresolved)} unresolved conversation thread(s)",
+        )
+
+
+def evaluate_hygiene(is_draft: bool, mergeable: str) -> Tuple[int, str, str]:
+    score = 0
+    details = []
+    if not is_draft:
+        score += 5
+        details.append("Ready (Not Draft)")
+    else:
+        details.append("Draft PR")
+
+    if mergeable == "MERGEABLE":
+        score += 5
+        details.append("No Git Conflicts")
+    else:
+        details.append("Has Conflicts")
+
+    status_str = " | ".join(details)
+    md_detail = f"✅ {status_str}" if score == 10 else f"⚠️ {status_str}"
+    return score, status_str, md_detail
+
+
+def build_pr_comment(score: int, min_score: int, passed: bool, items: list) -> str:
+    status_badge = "🚀 **READY TO MERGE**" if passed else "🚫 **BLOCKED & REJECTED**"
+    decision_msg = (
+        f"🎉 **Pull Request Approved!** نمره کیفی `{score}/100` کسب شد (حداقل نمره مجاز: `{min_score}`). "
+        "با توجه به رعایت استانداردها، تغییرات با موفقیت مرج می‌شوند."
+        if passed
+        else f"⛔ **Pull Request Rejected!** متأسفانه نمره کیفی `{score}/100` کمتر از حداقل مجاز (`{min_score}`) است. "
+        "جهت حفظ کیفیت کد بیس، این درخواست رد و بسته می‌شود. لطفاً نواقص جدول زیر را برطرف کرده و مجدداً تلاش کنید."
+    )
+
+    rows = "\n".join(
+        [f"| {name} | `{score_val}` | {desc} |" for name, score_val, desc in items]
+    )
+
+    return f"""## 🤖 PR-Score Gatekeeper Report
+
+{status_badge}
+
+{decision_msg}
+
+### 📊 Breakdown & Metrics:
+| Metric | Score | Details |
+| :--- | :---: | :--- |
+{rows}
+| **Total Score** | **`{score} / 100`** | **Threshold: `{min_score}`** |
+
+---
+*Evaluated automatically by `pr-score` workflow.*
+"""
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Evaluate PR mergeability score and perform automated merge/close."
+    )
+    parser.add_argument(
+        "pr",
+        nargs="?",
+        default="",
+        help="PR number or branch name (leave empty for current branch)",
+    )
+    parser.add_argument(
+        "--min-score", type=int, default=80, help="Minimum score to pass (default: 80)"
+    )
+    parser.add_argument(
+        "-a",
+        "--auto-action",
+        action="store_true",
+        help="Post comment and auto-merge if passed, or auto-close if failed",
+    )
+    parser.add_argument(
+        "--merge-method",
+        choices=["merge", "squash", "rebase"],
+        default="merge",
+        help="Merge strategy (default: merge)",
+    )
+    parser.add_argument(
+        "-w",
+        "--wait-ci",
+        action="store_true",
+        help="Wait for CI checks to complete before evaluating",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=600,
+        help="Timeout in seconds for CI checks (default: 600)",
+    )
+    args = parser.parse_args()
+
+    pr_arg = args.pr
+    if not pr_arg:
+        pr_arg = run_command(["gh", "pr", "view", "--json=number", "-q", ".number"])
+        if not pr_arg:
+            sys.stderr.write(
+                f"{RED}[!] No active PR found for current branch.{RESET}\n"
+            )
+            sys.exit(1)
+
+    if args.wait_ci:
+        data = wait_for_ci_completion(pr_arg, timeout_seconds=args.timeout)
+    else:
+        data = fetch_pr_data(pr_arg)
+
+    pr_num = str(data["number"])
+
+    ci_score, ci_term, ci_md = evaluate_ci(data.get("statusCheckRollup", []))
+    rev_score, rev_term, rev_md = evaluate_reviews(data.get("reviewDecision", ""))
+    disc_score, disc_term, disc_md = evaluate_discussions(data.get("threads", []))
+    size_score, size_term, size_md = evaluate_size(
+        data.get("additions", 0), data.get("deletions", 0)
+    )
+    hyg_score, hyg_term, hyg_md = evaluate_hygiene(
+        data.get("isDraft", False), data.get("mergeable", "")
+    )
+
+    total_score = ci_score + rev_score + disc_score + size_score + hyg_score
+
+    # Strict conditions: CI must not be failing, must reach min-score
+    passed = (
+        (total_score >= args.min_score)
+        and (ci_score > 0)
+        and (data.get("mergeable") == "MERGEABLE")
+    )
+
+    # Terminal Output
+    print(f"\n{BOLD}{BLUE}================ PR MERGE SCORECARD ================{RESET}")
+    print(f"{BOLD}PR #{pr_num}:{RESET} {data['title']}")
+    print(f"{BLUE}----------------------------------------------------{RESET}")
+    print(f"[*] CI Status Checks:        [{ci_score:02d}/30]  {ci_term}")
+    print(f"[*] Peer Reviews:            [{rev_score:02d}/25]  {rev_term}")
+    print(f"[*] Conversations:           [{disc_score:02d}/15]  {disc_term}")
+    print(f"[*] Code Size & Diff:        [{size_score:02d}/20]  {size_term}")
+    print(f"[*] Hygiene & Mergeable:     [{hyg_score:02d}/10]  {hyg_term}")
+    print(f"{BLUE}----------------------------------------------------{RESET}")
+    print(
+        f"{BOLD}FINAL SCORE:{RESET} {BOLD}{total_score} / 100{RESET} (Min required: {args.min_score})"
+    )
+
+    if passed:
+        print(f"STATUS: {GREEN}{BOLD}PASSED - READY TO MERGE 🚀{RESET}")
+    else:
+        print(f"STATUS: {RED}{BOLD}FAILED - BLOCKED 🚫{RESET}")
+    print(f"{BLUE}===================================================={RESET}\n")
+
+    # Automated Action
+    if args.auto_action:
+        metrics_table = [
+            ("CI / Tests", f"{ci_score}/30", ci_md),
+            ("Reviews", f"{rev_score}/25", rev_md),
+            ("Discussions", f"{disc_score}/15", disc_md),
+            ("Diff Size", f"{size_score}/20", size_md),
+            ("Hygiene/Conflicts", f"{hyg_score}/10", hyg_md),
+        ]
+        comment_body = build_pr_comment(
+            total_score, args.min_score, passed, metrics_table
+        )
+
+        print(f"{BLUE}[*] Posting report comment to PR #{pr_num}...{RESET}")
+        run_command(["gh", "pr", "comment", pr_num, "--body", comment_body])
+
+        if passed:
+            print(
+                f"{GREEN}[+] Criteria met! Merging PR #{pr_num} via '--{args.merge_method}'...{RESET}"
+            )
+            run_command(
+                [
+                    "gh",
+                    "pr",
+                    "merge",
+                    pr_num,
+                    f"--{args.merge_method}",
+                    "--delete-branch",
+                ]
+            )
+            print(f"{GREEN}✔ Successfully merged and branch cleaned up!{RESET}")
+            sys.exit(0)
+        else:
+            print(f"{RED}[-] Criteria not met. Closing PR #{pr_num}...{RESET}")
+            run_command(["gh", "pr", "close", pr_num])
+            print(f"{YELLOW}✔ PR #{pr_num} has been closed.{RESET}")
+            sys.exit(1)
+    else:
+        # Exit code based on result for CLI piping
+        sys.exit(0 if passed else 1)
+
+
+if __name__ == "__main__":
+    main()
