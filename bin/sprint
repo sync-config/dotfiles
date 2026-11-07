@@ -98,7 +98,7 @@ daily_ceremony() {
     
     echo ""
     echo "--- 🎯 Top Priorities for Today ---"
-    task +sprint -routine status:pending limit:5 rc.report.daily.columns:id,project,description,points,due.relative rc.report.daily.labels:ID,Project,Description,Pts,Due daily 2>/dev/null || task +sprint -routine status:pending limit:5
+    task +sprint -BLOCKED -routine status:pending limit:5 rc.report.daily.columns:id,project,description,points,due.relative rc.report.daily.labels:ID,Project,Description,Pts,Due daily 2>/dev/null || task +sprint -routine status:pending limit:5
 
     echo "-----------------------------------------------"
     echo "Quick Actions:"
@@ -172,7 +172,7 @@ refine_ceremony() {
     echo "       🔨 SPRINTOS | BACKLOG REFINEMENT        "
     echo "==============================================="
     echo "Tasks missing Story Points (points:none):"
-    task status:pending 'points:""' rc.report.next.columns:id,project,description,urgency rc.report.next.labels:ID,Project,Description,Urg next 2>/dev/null || true
+    task status:pending points:none rc.report.next.columns:id,project,description,urgency rc.report.next.labels:ID,Project,Description,Urg next 2>/dev/null || true
     echo "-----------------------------------------------"
     echo "Refinement actions:"
     echo "  Set points : task <id> modify points:<1|2|3|5>"
