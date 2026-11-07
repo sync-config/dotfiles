@@ -4,7 +4,7 @@ set -euo pipefail
 
 # Configuration
 TARGET_FILE="${HOME}/.sprint_target"
-RETRO_FILE="${HOME}/.sprint_retrospective.md"
+RETRO_FILE="${HOME}/.task/.sprint_retrospective.md"
 DEFAULT_TARGET=7
 
 # Calculate current week start (Saturday 00:00:00)
@@ -98,7 +98,7 @@ daily_ceremony() {
     
     echo ""
     echo "--- 🎯 Top Priorities for Today ---"
-    task +sprint -BLOCKED -routine status:pending limit:5 rc.report.daily.columns:id,project,description,points,due.relative rc.report.daily.labels:ID,Project,Description,Pts,Due daily 2>/dev/null || task +sprint -routine status:pending limit:5
+    task +sprint -BLOCKED -routine status:pending limit:3 rc.report.daily.columns:id,project,description,points,due.relative rc.report.daily.labels:ID,Project,Description,Pts,Due daily 2>/dev/null || task +sprint -routine status:pending limit:3
 
     echo "-----------------------------------------------"
     echo "Quick Actions:"
@@ -200,6 +200,61 @@ add_task() {
     echo "✅ Task $1 committed to sprint."
 }
 
+# Manage task Markdown documentation
+task_doc() {
+    local task_id="${1:-}"
+    if [[ -z "$task_id" ]]; then
+        echo "Usage: sprint doc <task-id>"
+        exit 1
+    fi
+
+    local doc_dir="${HOME}/.task/.sprint_docs"
+    mkdir -p "$doc_dir"
+
+    # Fetch task details via JSON
+    local task_json
+    task_json=$(task "$task_id" export 2>/dev/null)
+    if [[ -z "$task_json" || "$task_json" == "[]" ]]; then
+        echo "❌ Task ${task_id} not found."
+        exit 1
+    fi
+
+    local uuid desc project filepath editor_cmd
+    uuid=$(echo "$task_json" | jq -r '.[0].uuid')
+    desc=$(echo "$task_json" | jq -r '.[0].description')
+    project=$(echo "$task_json" | jq -r '.[0].project // "General"')
+    filepath="${doc_dir}/${task_id}-${project}.md"
+    editor_cmd="${EDITOR:-nvim}"
+
+    # If document does not exist, create template
+    if [[ ! -f "$filepath" ]]; then
+        cat << EOF > "$filepath"
+# Task #${task_id}: ${desc}
+
+- **Project:** ${project}
+- **UUID:** \`${uuid}\`
+- **Created at:** $(date +'%Y-%m-%d %H:%M')
+
+---
+
+## 🎯 Objective & Specifications
+
+
+## 📝 Implementation Notes & Logs
+
+
+## 🔗 References & Links
+
+EOF
+        # Link document path to task attribute
+        task "$task_id" modify doc:"$filepath" >/dev/null
+        echo "📄 Created documentation: $filepath"
+    fi
+
+    # Open with user preferred editor
+    "$editor_cmd" "$filepath"
+}
+
 # Command Dispatcher
 case "${1:-}" in
     planning)
@@ -216,6 +271,10 @@ case "${1:-}" in
         ;;
     refine)
         refine_ceremony
+
+        ;;
+    doc)
+        task_doc "${2:-}"
         ;;
     target)
         set_target "${2:-}"
@@ -234,6 +293,7 @@ case "${1:-}" in
         echo "  sprint refine   Backlog refinement (estimate unpointed tasks)"
         echo "  sprint review   Sprint review & velocity completed since Saturday"
         echo "  sprint retro    Sprint retrospective and markdown export"
+        echo "  sprint doc <id> Create/Open document for a task"
         echo "  sprint add <id> Commit backlog task into active sprint"
         echo "  sprint target <pts> Set weekly capacity target"
         ;;
