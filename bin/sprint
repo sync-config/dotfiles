@@ -74,4 +74,246 @@ case "$1" in
     show_header "DASHBOARD"
     task sprint
     ;;
+=======
+
+set -euo pipefail
+
+# Configuration
+TARGET_FILE="${HOME}/.sprint_target"
+RETRO_FILE="${HOME}/.sprint_retrospective.md"
+DEFAULT_TARGET=7
+
+# Calculate current week start (Saturday 00:00:00)
+get_saturday_sow() {
+    local dow days_back
+    dow=$(date +%u) # 1=Mon, ..., 6=Sat, 7=Sun
+    days_back=$(( (dow + 1) % 7 ))
+    echo "$(date -d "$days_back days ago" +%Y-%m-%d)T00:00:00"
+}
+
+# Fetch configured capacity target
+get_target() {
+    if [[ -f "$TARGET_FILE" ]]; then
+        cat "$TARGET_FILE"
+    else
+        echo "$DEFAULT_TARGET"
+    fi
+}
+
+# 1. Main Dashboard View
+show_dashboard() {
+    clear
+    local target week_start committed velocity health
+    target=$(get_target)
+    week_start=$(get_saturday_sow)
+
+    echo "==============================================="
+    echo "         🎯 PERSONAL SPRINT DASHBOARD          "
+    echo "==============================================="
+
+    # Active Project Tasks
+    task +sprint -routine status:pending rc.report.sprint.columns:id,project,description,points,urgency rc.report.sprint.labels:ID,Project,Description,Pts,Urg sprint 2>/dev/null || task +sprint -routine status:pending
+
+    echo "-----------------------------------------------"
+    
+    # Calculate committed points in backlog/pending
+    committed=$(task +sprint -routine status:pending export 2>/dev/null | jq '[.[].points // 0] | add // 0' 2>/dev/null || echo 0)
+    [[ -z "$committed" || "$committed" == "null" ]] && committed=0
+
+    # Calculate velocity completed since Saturday
+    velocity=$(task +sprint -routine status:completed end.after:"$week_start" export 2>/dev/null | jq '[.[].points // 0] | add // 0' 2>/dev/null || echo 0)
+    [[ -z "$velocity" || "$velocity" == "null" ]] && velocity=0
+
+    echo "📊 Capacity Target : ${target} pts"
+    echo "📌 Committed Scope : ${committed} pts"
+    echo "🚀 Velocity (Sat+) : ${velocity} pts"
+
+    if (( committed > target )); then
+        health="⚠️  OVER-COMMITTED (Scope Exceeds Capacity)"
+    elif (( committed == target )); then
+        health="✅ BALANCED (Optimally Loaded)"
+    else
+        health="🟢 UNDER CAPACITY (Ready for more)"
+    fi
+    echo "🩺 Sprint Health   : ${health}"
+    echo "==============================================="
+}
+
+# 2. Planning Ceremony
+planning_ceremony() {
+    clear
+    local target committed
+    target=$(get_target)
+    committed=$(task +sprint -routine status:pending export 2>/dev/null | jq '[.[].points // 0] | add // 0' 2>/dev/null || echo 0)
+    [[ -z "$committed" || "$committed" == "null" ]] && committed=0
+
+    echo "==============================================="
+    echo "       📋 SPRINTOS | SPRINT PLANNING           "
+    echo "==============================================="
+    echo "🎯 Weekly Capacity Target: ${target} pts"
+    echo "📌 Currently Selected    : ${committed} pts"
+    echo ""
+    echo "Available Ready Backlog Items:"
+    task -sprint -routine status:pending rc.report.next.columns:id,project,description,points,urgency rc.report.next.labels:ID,Project,Description,Pts,Urg next 2>/dev/null || true
+    echo "-----------------------------------------------"
+    echo "Action shortcuts:"
+    echo "  1) Add task to sprint : sprint add <ID>"
+    echo "  2) Adjust target      : sprint target <PTS>"
+    echo "==============================================="
+}
+
+# 3. Daily Standup Ceremony
+daily_ceremony() {
+    clear
+    echo "==============================================="
+    echo "         🚀 SPRINTOS | DAILY SCRUM             "
+    echo "==============================================="
+
+    echo "--- 🏃 Habits & Routines ---"
+    task +routine status:pending rc.report.daily.columns:id,project,description,due.relative rc.report.daily.labels:ID,Project,Description,Due daily 2>/dev/null || task +routine status:pending
+    
+    echo ""
+    echo "--- 🎯 Top Priorities for Today ---"
+    task +sprint -routine status:pending limit:5 rc.report.daily.columns:id,project,description,points,due.relative rc.report.daily.labels:ID,Project,Description,Pts,Due daily 2>/dev/null || task +sprint -routine status:pending limit:5
+
+    echo "-----------------------------------------------"
+    echo "Quick Actions:"
+    echo "  task <id> done"
+    echo "  task <id> modify wait:tomorrow due:tomorrow"
+    echo "==============================================="
+}
+
+# 4. Review Ceremony
+review_ceremony() {
+    clear
+    local week_start velocity completed_count
+    week_start=$(get_saturday_sow)
+    
+    velocity=$(task +sprint -routine status:completed end.after:"$week_start" export 2>/dev/null | jq '[.[].points // 0] | add // 0' 2>/dev/null || echo 0)
+    [[ -z "$velocity" || "$velocity" == "null" ]] && velocity=0
+    
+    completed_count=$(task +sprint -routine status:completed end.after:"$week_start" count 2>/dev/null || echo 0)
+
+    echo "==============================================="
+    echo "         🏁 SPRINTOS | SPRINT REVIEW           "
+    echo "==============================================="
+    echo "📅 Sprint Cycle : Since Saturday ($(echo "$week_start" | cut -d'T' -f1))"
+    echo "🎯 Velocity Done: ${velocity} pts (${completed_count} tasks completed)"
+    echo "-----------------------------------------------"
+    echo "Delivered User Stories & Tasks:"
+    task +sprint -routine status:completed end.after:"$week_start" rc.report.done.columns:id,end,project,description,points rc.report.done.labels:ID,Completed,Project,Description,Pts all 2>/dev/null || true
+    echo "==============================================="
+}
+
+# 5. Retrospective Ceremony
+retro_ceremony() {
+    clear
+    local date_str week_start velocity target good bad actions
+    date_str=$(date +%Y-%m-%d)
+    week_start=$(get_saturday_sow)
+    target=$(get_target)
+    velocity=$(task +sprint -routine status:completed end.after:"$week_start" export 2>/dev/null | jq '[.[].points // 0] | add // 0' 2>/dev/null || echo 0)
+    [[ -z "$velocity" || "$velocity" == "null" ]] && velocity=0
+
+    echo "==============================================="
+    echo "     🔍 SPRINTOS | SPRINT RETROSPECTIVE        "
+    echo "==============================================="
+    echo "Week Ending: ${date_str}"
+    echo "Target: ${target} pts | Delivered: ${velocity} pts"
+    echo "-----------------------------------------------"
+
+    read -r -p "🟢 What went well this week? " good
+    read -r -p "🔴 What needs improvement? " bad
+    read -r -p "💡 Concrete Action Item for next sprint: " actions
+
+    {
+        echo "## 📅 Sprint Retro: ${date_str}"
+        echo "- **Cycle Start:** ${week_start}"
+        echo "- **Velocity:** Delivered ${velocity} / ${target} target pts"
+        echo "- **Went Well:** ${good}"
+        echo "- **Issues:** ${bad}"
+        echo "- **Action Plan:** ${actions}"
+        echo ""
+    } >> "$RETRO_FILE"
+
+    echo "-----------------------------------------------"
+    echo "✅ Retrospective logged into: ${RETRO_FILE}"
+    echo "==============================================="
+}
+
+# 6. Backlog Refinement Ceremony
+refine_ceremony() {
+    clear
+    echo "==============================================="
+    echo "       🔨 SPRINTOS | BACKLOG REFINEMENT        "
+    echo "==============================================="
+    echo "Tasks missing Story Points (points:none):"
+    task status:pending points:none rc.report.next.columns:id,project,description,urgency rc.report.next.labels:ID,Project,Description,Urg next 2>/dev/null || true
+    echo "-----------------------------------------------"
+    echo "Refinement actions:"
+    echo "  Set points : task <id> modify points:<1|2|3|5>"
+    echo "  Break down : task <id> modify depends:<parent_id>"
+    echo "==============================================="
+}
+
+# Set Target Capacity
+set_target() {
+    if [[ -z "${1:-}" ]]; then
+        echo "Usage: sprint target <points>"
+        exit 1
+    fi
+    echo "$1" > "$TARGET_FILE"
+    echo "🎯 Sprint capacity target set to: $1 pts"
+}
+
+# Add Task to Sprint
+add_task() {
+    if [[ -z "${1:-}" ]]; then
+        echo "Usage: sprint add <task-id>"
+        exit 1
+    fi
+    task "$1" modify +sprint
+    echo "✅ Task $1 committed to sprint."
+}
+
+# Command Dispatcher
+case "${1:-}" in
+    planning)
+        planning_ceremony
+        ;;
+    daily)
+        daily_ceremony
+        ;;
+    review)
+        review_ceremony
+        ;;
+    retro)
+        retro_ceremony
+        ;;
+    refine)
+        refine_ceremony
+        ;;
+    target)
+        set_target "${2:-}"
+        ;;
+    add)
+        add_task "${2:-}"
+        ;;
+    help|--help|-h)
+        echo "SprintOS - Agile CLI Workflow"
+        echo "Usage: sprint [command]"
+        echo ""
+        echo "Commands:"
+        echo "  sprint          Show weekly dashboard & health"
+        echo "  sprint daily    Daily scrum (routines + top priorities)"
+        echo "  sprint planning Sprint planning ceremony & backlog pool"
+        echo "  sprint refine   Backlog refinement (estimate unpointed tasks)"
+        echo "  sprint review   Sprint review & velocity completed since Saturday"
+        echo "  sprint retro    Sprint retrospective and markdown export"
+        echo "  sprint add <id> Commit backlog task into active sprint"
+        echo "  sprint target <pts> Set weekly capacity target"
+        ;;
+    *)
+        show_dashboard
+        ;;
 esac

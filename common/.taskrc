@@ -54,3 +54,4 @@ data.location=/home/mohammad/.task
 #include no-color.theme
 
 news.version=2.6.0
+weekstart=Sunday
