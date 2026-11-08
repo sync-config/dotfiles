@@ -88,6 +88,18 @@ planning_ceremony() {
 
 # 3. Daily Standup Ceremony
 daily_ceremony() {
+
+    touch "/tmp/.sprint_daily_checked_$(date +'%Y-%m-%d')"
+
+    # Auto-complete today's Daily Scrum task if pending
+    local daily_task_id
+    daily_task_id=$(task +scrum description~"Sprint Daily" status:pending +READY _ids 2>/dev/null | head -n 1)
+
+    if [[ -n "$daily_task_id" ]]; then
+        task "$daily_task_id" done >/dev/null
+        echo -e "✅ [Scrum] Sprint Daily marked as completed for today.\n"
+    fi
+
     clear
     echo "==============================================="
     echo "         🚀 SPRINTOS | DAILY SCRUM             "

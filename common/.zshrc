@@ -50,3 +50,13 @@ done
 
 # opencode
 export PATH=/home/mohos/.opencode/bin:$PATH
+
+# Auto-check daily scrum on first terminal session of the day
+_check_sprint_daily() {
+    local flag_file="/tmp/.sprint_daily_checked_$(date +'%Y-%m-%d')"
+    if [[ ! -f "$flag_file" ]]; then
+        echo -e "\033[1;33m⚡ SprintOS:\033[0m You haven't run daily scrum yet today!"
+        echo -e "👉 Type \033[1;32msprint daily\033[0m to sync your day.\n"
+    fi
+}
+_check_sprint_daily
