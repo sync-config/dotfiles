@@ -93,12 +93,24 @@ daily_ceremony() {
     echo "         🚀 SPRINTOS | DAILY SCRUM             "
     echo "==============================================="
 
-    echo "--- 🏃 Habits & Routines ---"
-    task +routine status:pending rc.report.daily.columns:id,project,description,due.relative rc.report.daily.labels:ID,Project,Description,Due daily 2>/dev/null || task +routine status:pending
+    echo -e "\n--- 🏛️ Scrum Ceremonies Today ---"
+
+    local scrum_count
+    scrum_count=$(task +scrum status:pending +READY count 2>/dev/null || echo 0)
     
-    echo ""
-    echo "--- 🎯 Top Priorities for Today ---"
-    task +sprint -BLOCKED -routine status:pending limit:3 rc.report.daily.columns:id,project,description,points,due.relative rc.report.daily.labels:ID,Project,Description,Pts,Due daily 2>/dev/null || task +sprint -routine status:pending limit:3
+    if [[ "$scrum_count" -gt 0 ]]; then
+        task +scrum status:pending +READY rc.report.daily_scrum.columns:id,description,due rc.report.daily_scrum.labels:ID,Ceremony,Due daily_scrum
+    else
+        echo "No Scrum ceremonies scheduled for today."
+    fi
+
+    # 2. 🏃 Habits & Routines
+    echo -e "\n--- 🏃 Habits & Routines ---"
+    task +routine status:pending +READY -scrum rc.report.daily_routines.columns:id,project,description,due rc.report.daily_routines.labels:ID,Project,Description,Due daily_routines 2>/dev/null || true
+
+    # 3. 🎯 Top Priorities for Today (Sprint Tasks)
+    echo -e "\n--- 🎯 Top Priorities for Today ---"
+    task +sprint -routine -scrum status:pending -BLOCKED limit:5 rc.report.daily_tasks.columns:id,project,points,urgency,description rc.report.daily_tasks.labels:ID,Project,Pts,Urg,Description daily_tasks 2>/dev/null || true
 
     echo "-----------------------------------------------"
     echo "Quick Actions:"
