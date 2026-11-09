@@ -9,6 +9,7 @@ lazygit
 github-cli
 act
 xfce4-terminal
+task
 
 # Neovim / telescope / fzf / plugins requirements
 ripgrep
