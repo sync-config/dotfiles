@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 
+# --- SPRINT_BOOK_SHIM ---
+if [ "${1:-}" = "book" ]; then
+    shift
+    exec "$HOME/.dotfiles/bin/sprint-book" "$@"
+fi
+# ------------------------
+
 set -euo pipefail
 
 # Configuration
@@ -111,7 +118,7 @@ daily_ceremony() {
     scrum_count=$(task +scrum status:pending +READY count 2>/dev/null || echo 0)
     
     if [[ "$scrum_count" -gt 0 ]]; then
-        task +scrum status:pending +READY rc.report.daily_scrum.columns:id,description,due rc.report.daily_scrum.labels:ID,Ceremony,Due daily_scrum
+        task +scrum status:pending +READY rc.report.daily_scrum.columns:id,description,due rc.report.daily_scrum.labels:ID,Ceremony,Due daily_scrum 2>/dev/null
     else
         echo "No Scrum ceremonies scheduled for today."
     fi
@@ -279,6 +286,39 @@ EOF
     "$editor_cmd" "$filepath"
 }
 
+cmd_book() {
+    local title="$1"
+    local total_pages="$2"
+
+    if [[ -z "$title" || -z "$total_pages" ]]; then
+        echo "❌ Usage: sprint book <\"Book Title\"> <TotalPages>"
+        return 1
+    fi
+
+    local pages_per_day=$(( (total_pages + 29) / 30 ))
+    local today_date
+    today_date=$(date +"%Y-%m-%d")
+
+    echo "📖 Starting Book: '$title'"
+    echo "📊 Total: $total_pages pages | Pace: ~$pages_per_day pages/day"
+
+    # Add the recurring task with UDA fields
+    task add "Reading: $title (Page 0/$total_pages) (0-$pages_per_day)" \
+        project:Health \
+        +routine \
+        +reading \
+        +sprint \
+        recur:daily \
+        due:"$today_date 22:00" \
+        wait:due-14h \
+        book_title:"$title" \
+        current_page:0 \
+        total_pages:"$total_pages" \
+        points:0
+
+    echo "✅ Recurring habit created. It will wake up daily at 08:00 AM."
+}
+
 # Command Dispatcher
 case "${1:-}" in
     planning)
@@ -295,8 +335,10 @@ case "${1:-}" in
         ;;
     refine)
         refine_ceremony
-
         ;;
+    book)
+        cmd_book "$2" "$3" 
+      ;;
     doc)
         task_doc "${2:-}"
         ;;
@@ -311,15 +353,16 @@ case "${1:-}" in
         echo "Usage: sprint [command]"
         echo ""
         echo "Commands:"
-        echo "  sprint          Show weekly dashboard & health"
-        echo "  sprint daily    Daily scrum (routines + top priorities)"
-        echo "  sprint planning Sprint planning ceremony & backlog pool"
-        echo "  sprint refine   Backlog refinement (estimate unpointed tasks)"
-        echo "  sprint review   Sprint review & velocity completed since Saturday"
-        echo "  sprint retro    Sprint retrospective and markdown export"
-        echo "  sprint doc <id> Create/Open document for a task"
-        echo "  sprint add <id> Commit backlog task into active sprint"
-        echo "  sprint target <pts> Set weekly capacity target"
+        echo "  sprint                                   Show weekly dashboard & health"
+        echo "  sprint daily                             Daily scrum (routines + top priorities)"
+        echo "  sprint planning                          Sprint planning ceremony & backlog pool"
+        echo "  sprint refine                            Backlog refinement (estimate unpointed tasks)"
+        echo "  sprint review                            Sprint review & velocity completed since Saturday"
+        echo "  sprint retro                             Sprint retrospective and markdown export"
+        echo "  sprint book <book_title> <total_pages>   Book Tracking"
+        echo "  sprint doc <id>                          Create/Open document for a task"
+        echo "  sprint add <id>                          Commit backlog task into active sprint"
+        echo "  sprint target <pts>                      Set weekly capacity target"
         ;;
     *)
         show_dashboard
