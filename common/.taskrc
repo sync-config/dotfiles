@@ -57,3 +57,10 @@ news.version=2.6.0
 weekstart=Sunday
 uda.doc.type=string
 uda.doc.label=Document
+
+# Book SubCommand
+uda.sbook_title.type=string
+uda.sbook_key.type=string
+uda.sbook_total.type=numeric
+uda.sbook_done.type=numeric
+uda.sbook_pace.type=numeric
