@@ -64,3 +64,7 @@ uda.sbook_key.type=string
 uda.sbook_total.type=numeric
 uda.sbook_done.type=numeric
 uda.sbook_pace.type=numeric
+
+report.sprint_done.columns=uuid.short,end,project,description,points
+report.sprint_done.labels=UUID,Completed,Project,Description,Pts
+filter=status:completed and +sprint and -routine
