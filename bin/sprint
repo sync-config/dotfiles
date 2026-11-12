@@ -156,7 +156,7 @@ review_ceremony() {
     echo "🎯 Velocity Done: ${velocity} pts (${completed_count} tasks completed)"
     echo "-----------------------------------------------"
     echo "Delivered User Stories & Tasks:"
-    task +sprint -routine status:completed end.after:"$week_start" rc.report.done.columns:id,end,project,description,points rc.report.done.labels:ID,Completed,Project,Description,Pts all 2>/dev/null || true
+    task +sprint -routine status:completed end.after:"$week_start" sprint_done 2>/dev/null || true
     echo "==============================================="
 }
 
